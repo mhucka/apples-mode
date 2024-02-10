@@ -1,3 +1,4 @@
+;;; -*- lexical-binding: t; -*-
 ;;; apples-mode.el --- Major mode for editing and executing AppleScript code
 
 ;; Copyright (C) 2011 tequilasunset
@@ -65,9 +66,11 @@
 
 ;;; Code:
 
-(require 'cl-lib)
-(require 'easymenu)
-(require 'newcomment)
+(eval-and-compile
+  (require 'cl)
+  (require 'cl-lib)
+  (require 'easymenu)
+  (require 'newcomment))
 
 (defgroup apples nil
   "Major mode for editing and executing AppleScript code."
@@ -88,11 +91,11 @@
 (apples-define-show-func mode-version apples-mode-version)
 
 (defsubst apples-replace-re-comma->spaces (re)
-  "Replace all `,'s with `\\\\s-+' in RE."
+  "Replace all commas with `\\\\s-+' in RE."
   (replace-regexp-in-string "," "\\\\s-+" re))
 
 (defsubst apples-replace-re-space->spaces (re)
-  "Replace all ` 's with `\\\\s-+' in RE."
+  "Replace all spaces with `\\\\s-+' in RE."
   (replace-regexp-in-string " " "\\\\s-+" re))
 
 ;; DB
@@ -129,7 +132,7 @@ the same directory where apples-mode.el is located."
                             "apples-tmp-dir")))))
       (unless (file-directory-p dir)
         (mkdir dir t))
-      (loop for file in (apples-plist-get :tmp-files)
+      (cl-loop for file in (apples-plist-get :tmp-files)
             for tmp = (format "%s/%s.applescript" dir file)
             do
             (set file tmp)
@@ -267,7 +270,7 @@ If nil, treated as a symbol."
   :group 'apples)
 
 (defcustom apples-end-completion-hl 'words
-  "Just after end completion, highlight 'region, 'words or
+  "Just after end completion, highlight region, words or
 nothing (nil). See also `apples-end-completion-hl-duration'."
   :type '(choice symbol (const nil))
   :group 'apples)
@@ -293,7 +296,7 @@ nothing (nil). See also `apples-end-completion-hl-duration'."
   :group 'apples)
 
 ;; Faces
-(macrolet ((face (name &rest attrs)
+(cl-macrolet ((face (name &rest attrs)
                  `(defface ,(intern (format "apples-%s" name))
                     '((t (,@attrs)))
                     ,(subst-char-in-string ?- ?  (format "Face for %s." name))
@@ -376,7 +379,7 @@ Otherwise delete stored info."
     "tell application \"AppleScript Runner\" to do script \"%s\"" f/s)))
 
 (defun apples-parse-error (result)
-  (destructuring-bind
+  (cl-destructuring-bind
       (err-ov (actual-beg . err-buf)
               &aux err-beg err-end err-type err-msg err-num unknown)
       (values (apples-plist-get :err-ov) (apples-plist-get :run-info))
@@ -408,18 +411,18 @@ If error has occurred, display the error.
 In that case, if executed script is same as current buffer or in it,
 also highlight the error region and go to the beginning of it if
 `apples-follow-error-position' is non-nil."
-  (block nil
+  (cl-block nil
     (apples-plist-put :last-raw-result result)
     (apples-display-result
      (replace-regexp-in-string
       "%" "%%"                          ; %-sequence => %
       (if (= status 1)
           ;; error
-          (multiple-value-bind (unknown beg end type msg num buf ov)
+          (cl-multiple-value-bind (unknown beg end type msg num buf ov)
               (apples-parse-error result)
             ;; -1713
             (when (eq num -1713)
-              (return (apples-error--1713-workaround f/s)))
+              (cl-return (apples-error--1713-workaround f/s)))
             (when (and beg buf)
               ;; highlight and move
               (when apples-follow-error-position
@@ -464,8 +467,8 @@ Also delete the entire contents of the buffer."
   (= (process-exit-status proc) 1))
 
 (defsubst apples-proc-failed (msg buf)
-  "Display BUF's contents or MSG added 'missed message.
-After that, delete BUF's contents."
+  "Display contents of BUF or MSG, appending \"missed\" to the text.
+After that, delete contents of BUF."
   (let ((str (apples-buffer-string buf)))
     (message (or (and (not (string= str "")) str)
                  (concat msg "missed")))))
@@ -507,7 +510,7 @@ apples: Process is still running; kill it? ")
 (defun apples-compile (&optional filename output)
   "Compile FILENAME into OUTPUT."
   (interactive)
-  (labels ((read (file prompt default)
+  (cl-labels ((read (file prompt default)
                  (expand-file-name
                   (or file (read-file-name prompt default default)))))
     (lexical-let* ((filename (read filename "File: " buffer-file-name))
@@ -526,7 +529,7 @@ apples: Process is still running; kill it? ")
                    (buf (get-buffer-create " *apples-compile*"))
                    (args `("-o" ,output ,filename))
                    msg)
-      (when (every 'file-exists-p `(,filename ,output))
+      (when (cl-every 'file-exists-p `(,filename ,output))
         (setq msg (message "Compiling..."))
         (set-process-sentinel
          (apply #'start-process "apples-compile" buf "osacompile" args)
@@ -539,7 +542,7 @@ apples: Process is still running; kill it? ")
 (defun apples-handle-decompile (script filename)
   "Default function to handle decompiled script.
 To specify the default query, set `apples-decompile-query'."
-  (case (or apples-decompile-query
+  (cl-case (or apples-decompile-query
             (ignore-errors
               (read-char
                (apply #'format
@@ -784,7 +787,7 @@ are skipped.\n
 - Lines whose bol is in string or in comment
 - Comments"
   (save-excursion
-    (loop initially (beginning-of-line)
+    (cl-loop initially (beginning-of-line)
           while (not (bobp))
           do (forward-line -1)
           unless (or (looking-at "\\s-*$")
@@ -792,7 +795,7 @@ are skipped.\n
                      (let ((face-prop (save-excursion
                                         (skip-chars-forward " \t")
                                         (get-text-property (point) 'face))))
-                       (some (lambda (face)
+                       (cl-some (lambda (face)
                                (if (listp face-prop)
                                    (memq face face-prop)
                                  (eq face face-prop)))
@@ -824,15 +827,15 @@ whitespaces are deleted."
 
 (defsubst apples-string-match (regexps string)
   "Unlike `string-match', first argument has to be a list of REGEXPS."
-  (some (lambda (re) (string-match re string)) regexps))
+  (cl-some (lambda (re) (string-match re string)) regexps))
 
 (defun apples-parse-lines ()
   "Parse current and previous lines then return the values."
-  (let ((prev-bol (unless (= (point-at-bol) (point-min))
+  (let ((prev-bol (unless (= (pos-bol) (point-min))
                     (apples-ideal-prev-bol)))
         (cchar-re (concat (apples-continuation-char) "$"))
         prev-indent prev-lword prev-lstr pprev-bol prev-cchar-p pprev-cchar-p)
-    (flet ((cchar? (lstr) (string-match cchar-re lstr)))
+    (cl-flet ((cchar? (lstr) (string-match cchar-re lstr)))
       (when prev-bol
         (save-excursion
           (goto-char prev-bol)
@@ -854,20 +857,20 @@ whitespaces are deleted."
 (defun apples-indent-line ()
   "Indent current line according to AppleScript indentation rules."
   (interactive "^")
-  (let* ((bol-ppss (save-excursion (syntax-ppss (point-at-bol))))
+  (let* ((bol-ppss (save-excursion (syntax-ppss (pos-bol))))
          (bol-is-in-string (nth 3 bol-ppss))
          (bol-is-in-comment (nth 4 bol-ppss))
          (pos (point))
          indent)
     (unless bol-is-in-string
-      (multiple-value-bind
-          (cur-col cur-indent cur-lword prev-bol prev-indent
-                   prev-lword prev-lstr prev-cchar-p pprev-cchar-p)
+      (cl-multiple-value-bind
+          (cur-col cur-indent cur-lword prev-indent prev-lword
+                   prev-lstr prev-cchar-p pprev-cchar-p)
           (apples-parse-lines)
         (if bol-is-in-comment
             (setq indent (or prev-indent 0))
           ;; bol is neither in string nor in comment
-          (flet ((match? (regs str) (and regs str (apples-string-match regs str)))
+          (cl-flet ((match? (regs str) (and regs str (apples-string-match regs str)))
                  (member? (str lst) (and str lst (member str lst))))
             (let* ((cchar-indent?   (and prev-cchar-p (not pprev-cchar-p)))
                    (prev-indent?    (match? apples-indent-regexps prev-lstr))
@@ -907,8 +910,8 @@ whitespaces are deleted."
 (defun apples-toggle-indent ()
   "Toggle indentation."
   (interactive "^")
-  (unless (apples-in-string-p (point-at-bol))
-    (multiple-value-bind
+  (unless (apples-in-string-p (pos-bol))
+    (cl-multiple-value-bind
         (cur-col cur-indent _1 prev? prev-indent _2 _3 prev-cchar-p pprev-cchar-p)
         (apples-parse-lines)
       (let* ((pos (point))
@@ -930,7 +933,7 @@ whitespaces are deleted."
 
 ;; end completion
 (defconst apples-statements
-  `(,@(loop for word in '("considering" "ignoring" "try" "if"
+  `(,@(cl-loop for word in '("considering" "ignoring" "try" "if"
                           "repeat" "tell" "using terms from")
             collect (cons word word))
     ("with timeout"                  . "timeout"                    )
@@ -946,7 +949,7 @@ whitespaces are deleted."
 (defun apples-parse-statement ()
   "Parse the current statement block and return the values
 \(BOL-WHERE-STATEMENT-STARTS BEG-WORD-OF-STATEMENT END-WORD-OF-STATEMENT)."
-  (destructuring-bind (min count nils &aux bol lstr)
+  (cl-destructuring-bind (min count nils &aux bol lstr)
       (values (point-min) 1 (values nil nil nil))
     (if (apples-in-string/comment-p)
         nils
@@ -959,12 +962,12 @@ whitespaces are deleted."
                 (goto-char bol)
                 (setq lstr (apples-line-string))
                 (if (string-match "^end\\>" lstr)
-                    (incf count)
-                  (loop for (beg . end) in apples-statements
+                    (cl-incf count)
+                  (cl-loop for (beg . end) in apples-statements
                         when (and (string-match (concat "^" beg "\\>") lstr)
                                   (not (apples-string-match apples-noindent-regexps
                                                             lstr)))
-                        do (if (zerop (decf count))
+                        do (if (zerop (cl-decf count))
                                (throw 'val (values bol beg end))
                              (throw 'loop nil))
                         finally
@@ -975,7 +978,7 @@ whitespaces are deleted."
                                                  lstr)
                                    (setq end (match-string-no-properties 1 lstr))
                                    (not (string= end "error"))
-                                   (zerop (decf count)))
+                                   (zerop (cl-decf count)))
                           (throw 'val (values bol
                                               (concat "on " end)
                                               end)))))))))))))
@@ -984,7 +987,7 @@ whitespaces are deleted."
   "Insert `end + current-statement-name'. If `apples-end-completion-hl' is
 specified, also highlight the matching statement."
   (interactive "^")
-  (multiple-value-bind (bol bword eword)
+  (cl-multiple-value-bind (bol bword eword)
       (apples-parse-statement)
     (when eword
       (insert "end " eword)
@@ -992,14 +995,14 @@ specified, also highlight the matching statement."
         (apples-end-completion-hl bol bword eword)))))
 
 (defun apples-end-completion-hl (bol bword eword)
-  (destructuring-bind ((bov . eov) beg pos)
+  (cl-destructuring-bind ((bov . eov) beg pos)
       (values (apples-plist-get :end-ovs)
               (save-excursion
                 (goto-char bol)
                 (skip-chars-forward " \t")
                 (point))
               (point))
-    (case apples-end-completion-hl
+    (cl-case apples-end-completion-hl
       (region (move-overlay bov beg pos))
       (words  (move-overlay bov beg (+ beg (length bword)))
               (move-overlay eov (- pos (length eword) 4) pos)))
@@ -1024,6 +1027,7 @@ specified, also highlight the matching statement."
         "beside" "between" "but" "by" "considering" "contain" "contains"
         "contains" "continue" "copy" "div" "does" "eighth" "else" "end" "equal"
         "equals" "error" "every" "exit" "false" "fifth" "first" "for" "fourth"
+        "equals" "every" "exit" "false" "fifth" "first" "for" "fourth"
         "from" "front" "get" "given" "global" "if" "ignoring" "in" "instead of"
         "into" "is" "it" "its" "last" "local" "me" "middle" "mod" "my" "ninth"
         "not" "of" "on" "onto" "or" "out of" "over" "prop" "property" "put"
@@ -1035,6 +1039,7 @@ specified, also highlight the matching statement."
      . (,@(mapcar 'car apples-statements)
         "application" "considering application responses" "continue" "else"
         "end" "error" "exit" "ignoring application responses" "on"
+        "end" "exit" "ignoring application responses" "on"
         "repeat until" "repeat while" "repeat with" "return" "then"))
     (commands
      . ("ASCII character" "ASCII number" "activate" "AGStart" "beep" "copy"
@@ -1193,7 +1198,7 @@ specified, also highlight the matching statement."
                   "Macintosh HD:System:Library:Speech:Voices:"
                   "/System/Library/Speech/Voices/")
                  )))
-          (loop for (folder path posix) in (nreverse lst)
+          (cl-loop for (folder path posix) in (nreverse lst)
                 collect (propertize folder 'path path 'posix posix))))
     )
   "Keywords of AppleScript. Each element has the form (TYPE . KEYWORDS).")
@@ -1207,11 +1212,11 @@ specified, also highlight the matching statement."
 
 (defvar apples-font-lock-keywords
   (let ((i apples-identifier))
-    (flet ((kws (type) (apples-replace-re-space->spaces
-                        (regexp-opt (apples-keywords type) 'words)))
-           (cat (&rest s) (apples-replace-re-comma->spaces (apply #'concat s))))
+    (cl-flet ((kws (type) (apples-replace-re-space->spaces
+                           (regexp-opt (apples-keywords type) 'symbols)))
+              (cat (&rest s) (apples-replace-re-comma->spaces (apply #'concat s))))
       `(
-        ("\\<error\\>"                          0 'apples-error                )
+        ("\\_<error\\_>"                          0 'apples-error                )
         (,(kws 'statements)                     1 'apples-statements           )
         (,(cat "^\\s-*\\(?:on\\|to\\),\\(" i "\\)")
          1 font-lock-function-name-face )
@@ -1269,8 +1274,8 @@ See also `font-lock-defaults' and `font-lock-keywords'.")
           ["Key => Key Code" apples-lookup-key->key-code]
           ["Key Code => Key" apples-lookup-key-code->key])
          ("path to..."
-          ,@(loop for folder in (nreverse (apples-keywords 'standard-folders))
-                  collect (multiple-value-bind (path posix)
+          ,@(cl-loop for folder in (nreverse (apples-keywords 'standard-folders))
+                  collect (cl-multiple-value-bind (path posix)
                               (with-temp-buffer
                                 (insert folder)
                                 (let ((pos (point-min)))
@@ -1300,7 +1305,7 @@ See also `font-lock-defaults' and `font-lock-keywords'.")
   "Set up keybindings for `apples-mode' according to `apples-keymap'."
   (when (and apples-keymap
              (not (apples-plist-get :keybinded?)))
-    (loop for (key . cmd) in apples-keymap
+    (cl-loop for (key . cmd) in apples-keymap
           do (define-key apples-mode-map (read-kbd-macro key) cmd)
           finally (apples-plist-put :keybinded? t))))
 
@@ -1323,7 +1328,7 @@ See also `font-lock-defaults' and `font-lock-keywords'.")
            (?\) ")( 4b")
            (?*  ". 23b")
            )))
-    (loop for (char entry) in lst
+    (cl-loop for (char entry) in lst
           do (modify-syntax-entry char entry st))
     st)
   "Syntax table used in `apples-mode'.")
