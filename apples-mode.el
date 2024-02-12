@@ -780,8 +780,8 @@ To specify the default query, set `apples-decompile-query'."
     (nth 3 (syntax-ppss pos))))
 
 (defsubst apples-ideal-prev-bol ()
-  "Return the point of previous bol or nil. Lines like the followings
-are skipped.\n
+  "Return the point of previous bol or nil. Lines like the following
+are skipped:
 - Empty lines
 - Lines filled by whitespaces
 - Lines whose bol is in string or in comment
@@ -861,11 +861,12 @@ whitespaces are deleted."
          (bol-is-in-string (nth 3 bol-ppss))
          (bol-is-in-comment (nth 4 bol-ppss))
          (pos (point))
+         prev-bol
          indent)
     (unless bol-is-in-string
       (cl-multiple-value-bind
-          (cur-col cur-indent cur-lword prev-indent prev-lword
-                   prev-lstr prev-cchar-p pprev-cchar-p)
+          (cur-col cur-indent cur-lword prev-bol prev-indent
+                   prev-lword prev-lstr prev-cchar-p pprev-cchar-p)
           (apples-parse-lines)
         (if bol-is-in-comment
             (setq indent (or prev-indent 0))
